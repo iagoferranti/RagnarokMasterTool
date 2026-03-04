@@ -1,1 +1,0 @@
-pyinstaller --noconfirm --onefile --console --clean --name "RagnarokMasterTool" --icon "icon.ico" --hidden-import "fabricador" --hidden-import "checkin_bot_v2" --hidden-import "provider_email" --hidden-import "provider_smailpro" --collect-all "DrissionPage" master.py
