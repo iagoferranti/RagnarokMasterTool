@@ -1,10 +1,18 @@
+# Pastas pesadas e de sistema
+profiles/
+perfil_mestre/
+p_*/
+logs/
 __pycache__/
-build/
-dist/
+_quarentena/
+
+# Dados de contas e configurações locais
+*.json
+*.txt
+*.csv
+!version.txt
+!gerar exe.txt
+
+# Binários
+*.exe
 *.spec
-navegadores/
-accounts.json
-licenca.txt
-user_license.key
-checkin_bot.py
-teste_cf.py

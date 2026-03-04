@@ -203,7 +203,8 @@ def processar_conta(email_user, senha_user, usar_proxy=False) -> bool:
         if page.ele('text=Alterar a OTP'):
             print(f"   {Cores.AMARELO}⚠️ Já tem OTP! (Nada a fazer aqui){Cores.RESET}")
             # Se já tem, salvamos como sucesso para sair da UTI
-            salvar_conta_nova(email_user, SENHA_JOGO, "JA_POSSUIA_OTP")
+            # CORREÇÃO: Passa status explicitamente e seed vazia ou None
+            salvar_conta_nova(email_user, SENHA_JOGO, "", status="JA_POSSUIA_OTP")
             return True 
 
         btn = page.ele('text:Solicitação de serviço') or page.ele('css:button[class*="page_otp_join_btn"]')
@@ -271,7 +272,8 @@ def processar_conta(email_user, senha_user, usar_proxy=False) -> bool:
                     
                     print(f"   {Cores.VERDE}✅ SUCESSO TOTAL!{Cores.RESET}")
                     # Salva no arquivo final
-                    salvar_conta_nova(email_user, SENHA_JOGO, seed)
+                    # CORREÇÃO: Status explícito
+                    salvar_conta_nova(email_user, SENHA_JOGO, seed, status="PRONTA_PARA_FARMAR")
                     return True
 
         log_erro("Timeout esperando e-mail OTP")
