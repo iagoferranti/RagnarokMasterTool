@@ -7,7 +7,6 @@ import subprocess
 import ctypes
 import re
 import json_cleaner 
-import provider_smailpro
 import provider_email
 import divisor_contas
 from datetime import datetime
