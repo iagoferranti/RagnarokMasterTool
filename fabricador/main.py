@@ -44,14 +44,17 @@ sys.path.append(config.BASE_PATH)
 try:
     from provider_email import ProviderLista
 except Exception:
-    print("\n❌ ERRO CRÍTICO NO PROVIDER_EMAIL:")
-    sys.exit()
+    # Se não achar na raiz, tenta importar como módulo se existir
+    ProviderLista = None
+    print("⚠️ Aviso: ProviderLista (provider_email.py) não carregado.")
 
 try:
+    # Como movemos api_smail para quarentena, ele vai cair aqui
     from api_smail import ProviderSmailPro
 except Exception:
-    print("\n❌ ERRO CRÍTICO NO API_SMAIL:")
-    sys.exit()
+    ProviderSmailPro = None
+    # Não damos sys.exit() aqui para o bot não fechar à toa
+    print("⚠️ Aviso: API SmailPro não carregada (Arquivo na quarentena ou ausente).")
 
 print("--------------------------------------------------")
 

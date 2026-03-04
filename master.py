@@ -26,6 +26,7 @@ except ImportError:
     premios_manager = None
 
 
+
 os.system('')
 
 class Cores:
@@ -107,15 +108,51 @@ def carregar_config():
 
 CONF = carregar_config()
 
-def verificar_atualizacao():
-    if not getattr(sys, 'frozen', False): return 
-    print(f"{Cores.CINZA}🔄 Checando updates...{Cores.RESET}")
+def _is_newer_version(atual, remota):
+    """Compara strings de versão simples (ex: 1.0.0 vs 1.0.1)"""
     try:
-        r = requests.get(URL_VERSION_TXT, timeout=5)
-        if _is_newer_version(VERSAO_ATUAL, r.text.strip()):
-            print(f"\n{Cores.AMARELO}🚨 NOVA VERSÃO DISPONÍVEL!{Cores.RESET}")
-            time.sleep(2)
-    except: pass
+        return [int(x) for x in remota.split('.')] > [int(x) for x in atual.split('.')]
+    except:
+        return remota != atual
+
+def verificar_atualizacao():
+    # Só verifica se estiver rodando o .exe (frozen)
+    if not getattr(sys, 'frozen', False): return
+
+    URL_VERSION_RAW = "https://raw.githubusercontent.com/iagoferranti/RagnarokMasterTool/main/version.txt"
+    URL_RELEASES = "https://github.com/iagoferranti/RagnarokMasterTool/releases"
+
+    print(f"{Cores.CINZA}🔄 Checando updates... (v{VERSAO_ATUAL}){Cores.RESET}")
+    
+    try:
+        r = requests.get(URL_VERSION_RAW, timeout=10)
+        if r.status_code == 200:
+            versao_remota = r.text.strip()
+            
+            if _is_newer_version(VERSAO_ATUAL, versao_remota):
+                print(f"\n{Cores.AMARELO}🚨 NOVA VERSÃO DISPONÍVEL: {versao_remota}{Cores.RESET}")
+                
+                # Alerta sonoro ou visual (Caixa de mensagem do Windows)
+                import ctypes
+                import webbrowser
+                
+                msg = f"Uma nova versao ({versao_remota}) foi encontrada!\n\nVoce deseja baixar a atualizacao agora?"
+                res = ctypes.windll.user32.MessageBoxW(0, msg, "Atualizacao Disponivel", 0x24) # 0x24 = Sim/Não + Ícone de Interrogação
+                
+                if res == 6: # 6 é o código para "Sim"
+                    webbrowser.open(URL_RELEASES)
+                    print(f"{Cores.VERDE}🚀 Abrindo pagina de downloads... O bot sera fechado.{Cores.RESET}")
+                    time.sleep(2)
+                    sys.exit()
+            else:
+                print(f"{Cores.VERDE}✅ Bot atualizado.{Cores.RESET}")
+    except Exception as e:
+        print(f"{Cores.VERMELHO}⚠️ Falha ao verificar update: {e}{Cores.RESET}")
+
+
+if __name__ == "__main__":
+    # 1. Primeiro verifica se tem update
+    verificar_atualizacao()
 
 def verificar_sessao_criacao(silencioso=False):
     if not os.path.exists(ARQUIVO_NOVAS): return 0
