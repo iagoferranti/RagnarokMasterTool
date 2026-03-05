@@ -1,9 +1,11 @@
 {
+    "owner_email": "iago.cortellini@gmail.com",
     "licenca_email": "iago.cortellini@gmail.com",
     "headless": false,
     "tag_email": "rag",
     "sobrenome_padrao": "Silva",
     "telegram_token": "",
     "telegram_chat_id": "",
-    "smailpro_key": "d46e88920fe2556fc400bf27091bc2f8"
+    "smailpro_key": "d46e88920fe2556fc400bf27091bc2f8",
+    "nppr_api_key": "whCgTNT2tYwTCIpx8S3Mn1SPvBNNf8hzEIHheOmcgRXLRUx5fIxLwDvKgGC0zvbr"
 }

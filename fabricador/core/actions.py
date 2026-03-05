@@ -423,7 +423,10 @@ def login_e_capturar_otp(page, email, senha):
         return None, "ERR_LOGIN"
 
 
-def criar_conta(page, blacklist, sessao, provedor_email):
+def criar_conta(page, blacklist, sessao, provedor_email, config):
+
+    token_do_site = config.get("nppr_api_key")
+
     """ Fluxo completo de criação de conta usando Checker Web para evitar bloqueios """
     # 1. limpar cookies
     try:
@@ -454,9 +457,12 @@ def criar_conta(page, blacklist, sessao, provedor_email):
     # 3. BUSCA CÓDIGO VIA CHECKER (Substituindo IMAP que falhou)
     log_sistema("   📧 Buscando código de Cadastro via Checker Web...")
     from ..modules.outlook_checker import buscar_codigo_via_checker
+
+    # Pega a chave que você salvou no JSON
+    token_do_site = config.get("nppr_api_key")
     
     # IMPORTANTE: Passamos a string completa (sessao.full_string) que contém o Token OAuth2
-    codigo = buscar_codigo_via_checker(page, sessao.full_string, tipo_codigo="cadastro")
+    codigo = buscar_codigo_via_checker(page, sessao.full_string, tipo_codigo="cadastro",token_nppr=token_do_site)
 
     if not codigo: return False, "NO_CODE_CHECKER"
     log_sistema(f"   🔥 Código de Cadastro recebido: {codigo}")
@@ -539,26 +545,34 @@ def criar_conta(page, blacklist, sessao, provedor_email):
         return False, "FAIL_FINAL"
 
 
-def recuperar_otp_pendente(page, email, senha_jogo, senha_email, provedor_email):
+def recuperar_otp_pendente(page, email, senha_jogo, senha_email, provedor_email, token_nppr=None):
     """
-    Fluxo de resgate de OTP/SEED para contas já cadastradas:
-
-      1. Cria uma SessaoTemp (email/senha_email)
-      2. Loga na conta no site (login_e_capturar_otp)
-      3. Busca OTP no webmail
-      4. Digita OTP, captura Seed
-      5. Gera TOTP e valida
-
-    Retorna:
-        (True, seed_str) em caso de sucesso
-        (False, None)   em qualquer falha
+    Fluxo de resgate de OTP/SEED para contas já cadastradas com limpeza de sessão.
     """
     log_sistema(f"🔄 Iniciando resgate OTP para: {email}")
+
+    # --- 🧹 LIMPEZA DE SESSÃO ANTERIOR ---
+    try:
+        # Acessa a página de login para verificar o estado
+        page.get("https://www.gnjoylatam.com/pt")
+        
+        # Procura o botão de Logout que você identificou no log
+        btn_logout = page.ele('.header_logoutBtn__6Pv_m', timeout=3)
+        if btn_logout:
+            log_sistema("🧹 [Resgate] Conta anterior detectada. Fazendo logout...")
+            btn_logout.click()
+            page.wait.load_start()
+        
+        # Garante que não sobrou nenhum rastro de login nos cookies do navegador
+        page.run_cdp('Network.clearBrowserCookies')
+        log_info("✨ Navegador limpo para novo login.")
+    except Exception as e_clean:
+        log_info(f"ℹ️ Aviso na limpeza de sessão: {e_clean}")
+    # -------------------------------------
 
     class SessaoTemp:
         __firstlineno__ = 473
         __static_attributes__ = ("email", "senha")
-
         def __init__(self, e, s):
             self.email = e
             self.senha = s
@@ -566,103 +580,79 @@ def recuperar_otp_pendente(page, email, senha_jogo, senha_email, provedor_email)
     sessao = SessaoTemp(email, senha_email)
 
     try:
+        # Agora o site estará na tela de login vazia, pronto para receber HershelJewesszesd
         ok, status = login_e_capturar_otp(page, email, senha_jogo)
         if not ok:
             log_erro(f"Falha ao logar na conta para resgate: {status}")
             return False, None
 
         log_sistema("⏳ Buscando código OTP no Outlook...")
-        otp = provedor_email.buscar_codigo_na_web(
-            sessao, page, manter_sessao=True
+
+        from fabricador.modules.outlook_checker import buscar_codigo_via_checker
+
+        otp = buscar_codigo_via_checker(
+            page, 
+            senha_email,      # String full e-mail|senha|rec
+            tipo_codigo='otp', 
+            token_nppr=token_nppr
         )
+        
         if not otp:
-            log_erro("Falha ao capturar o OTP no webmail.")
+            log_erro("Falha ao capturar o OTP no webmail via NPPR.")
             return False, None
 
-        # digita OTP na tela
-        try:
-            log_info("⌨️ Digitando OTP resgatado...")
-            ele_otp = page.ele("#authnumber")
-            ele_otp.clear()
-            digitar_como_humano(page, ele_otp, otp)
-            sleep_dinamico(1)
+        # --- Inserção do OTP e captura da Seed (mesmo código que você já tem) ---
+        log_info("⌨️ Digitando OTP resgatado...")
+        ele_otp = page.ele("#authnumber")
+        ele_otp.clear()
+        digitar_como_humano(page, ele_otp, otp)
+        sleep_dinamico(1)
 
-            btn_otp_ok = page.ele("text:Verificação concluída")
-            if btn_otp_ok:
-                clicar_com_seguranca(page, btn_otp_ok, "Verificação OTP")
+        btn_otp_ok = page.ele("text:Verificação concluída")
+        if btn_otp_ok:
+            clicar_com_seguranca(page, btn_otp_ok, "Verificação OTP")
 
-            sleep_dinamico(3)
+        sleep_dinamico(3)
 
-            # captura seed
-            seed_final = ""
-            for i in range(40):
-                ele_seed = page.ele(".page_otp_key__nk3eO")
-                if ele_seed and ele_seed.text.strip():
-                    seed_final = ele_seed.text.strip()
-                    break
-                if i == 20 and page.ele("text:Verificação concluída"):
-                    page.ele("text:Verificação concluída").click()
-                time.sleep(0.5)
+        seed_final = ""
+        for i in range(40):
+            ele_seed = page.ele(".page_otp_key__nk3eO")
+            if ele_seed and ele_seed.text.strip():
+                seed_final = ele_seed.text.strip()
+                break
+            if i == 20 and page.ele("text:Verificação concluída"):
+                page.ele("text:Verificação concluída").click()
+            time.sleep(0.5)
 
-            if not seed_final or len(seed_final) < 8:
-                log_erro("⛔ Erro: Seed não carregou no resgate.")
-                return False, None
+        if not seed_final or len(seed_final) < 8:
+            log_erro("⛔ Erro: Seed não carregou no resgate.")
+            return False, None
 
-            log_sistema(f"💎 Seed Recuperada com Sucesso: {seed_final}")
+        log_sistema(f"💎 Seed Recuperada com Sucesso: {seed_final}")
 
-            # esperar janela boa de tempo
-            while True:
-                segundo_atual = datetime.now().second
-                if (25 <= segundo_atual <= 30) or segundo_atual >= 55:
-                    time.sleep(1)
-                else:
-                    break
+        # --- Validação Final do TOTP ---
+        seed_clean = re.sub(r"[^A-Z2-7]", "", seed_final.upper().replace(" ", ""))
+        import pyotp as _pyotp
+        totp = _pyotp.TOTP(seed_clean)
+        token_gerado = totp.now()
 
-            # normaliza seed e importa pyotp localmente
-            seed_clean = re.sub(
-                r"[^A-Z2-7]",
-                "",
-                seed_final.upper().replace(" ", ""),
-            )
-            import pyotp as _pyotp
-
-            totp = _pyotp.TOTP(seed_clean)
-            token_gerado = totp.now()
-
-            # campo otpNumber
-            ele_input_otp = page.ele("@name=otpNumber") or page.ele(
-                'css:input[name="otpNumber"]'
-            )
-            if not ele_input_otp:
-                return False, None
-
+        ele_input_otp = page.ele("@name=otpNumber") or page.ele('css:input[name="otpNumber"]')
+        if ele_input_otp:
             ele_input_otp.clear()
             digitar_como_humano(page, ele_input_otp, token_gerado)
-
-            # confirmar
+            
             btn_confirme = page.ele("text:Confirme")
             if btn_confirme:
                 clicar_com_seguranca(page, btn_confirme, "Confirmar Final")
-                # ou: clicar_com_seguranca(page, "text:Confirme", "Confirmar Final")
 
-            sleep_dinamico(3)
+        sleep_dinamico(3)
+        html_final = page.ele("tag:body").text.lower()
 
-            html_final = (
-                page.ele("tag:body")
-                .text.lower()
-            )
-
-            if ("incorreto" in html_final) or (
-                "atividade anormal" in html_final
-            ):
-                log_erro("Erro de validação final no resgate.")
-                return False, None
-
-            return True, seed_final
-
-        except Exception as e:
-            log_erro(f"Erro durante o resgate do OTP: {e}")
+        if ("incorreto" in html_final) or ("atividade anormal" in html_final):
+            log_erro("Erro de validação final no resgate.")
             return False, None
+
+        return True, seed_final
 
     except Exception as e:
         log_erro(f"Erro durante o resgate do OTP: {e}")

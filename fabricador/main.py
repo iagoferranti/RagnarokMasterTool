@@ -241,85 +241,68 @@ def executar():
     sucessos = 0
     bloqueios_consecutivos = 0
 
-    # ── Varredura inicial: resgatar contas SEM_OTP ────────────────────
+    # --- Varredura inicial: resgatar contas SEM_OTP --------------------
     import json as _json
 
     arquivo_json = os.path.join(config.BASE_PATH, "accounts.json")
+    arquivo_txt_contas = os.path.join(config.BASE_PATH, "contas_hotmail.txt") 
 
     if os.path.exists(arquivo_json):
         try:
             with open(arquivo_json, "r", encoding="utf-8") as f:
-                contas_json: list[dict] = _json.load(f)
+                contas_json = _json.load(f)
 
-            contas_pendentes = [
-                c for c in contas_json
-                if c.get("status") == "SEM_OTP"
-            ]
+            contas_pendentes = [c for c in contas_json if c.get("status") == "SEM_OTP"]
 
             if contas_pendentes:
                 from fabricador.core.actions import recuperar_otp_pendente
+                
+                linhas_txt = []
+                if os.path.exists(arquivo_txt_contas):
+                    with open(arquivo_txt_contas, "r", encoding="utf-8") as f_txt:
+                        linhas_txt = f_txt.readlines()
 
-                # Abre um browser temporário apenas para o resgate
-                co_resgate = ChromiumOptions()
-                co_resgate.set_argument("--no-sandbox")
+                co_resgate = ChromiumOptions().set_argument("--no-sandbox")
                 page_resgate = ChromiumPage(addr_or_opts=co_resgate)
 
                 for conta in contas_pendentes:
                     email_pendente = conta["email"]
                     senha_jogo = conta["password"]
 
-                    senha_email = prov.buscar_senha_txt(email_pendente)
-                    if not senha_email:
-                        print(
-                            f"{Cores.VERMELHO}"
-                            f"⚠️ Senha do Outlook não encontrada no TXT "
-                            f"para {email_pendente}. Pulando."
-                            f"{Cores.RESET}"
-                        )
-                        continue
+                    # Busca a linha full no TXT para o Checker
+                    conta_full_string = next((l.strip() for l in linhas_txt if email_pendente in l), None)
 
+                    if not conta_full_string:
+                        print(f"{Cores.VERMELHO}⚠️ Linha não encontrada no TXT para {email_pendente}. Pulando.{Cores.RESET}")
+                        continue
+                    
+                    # 🔥 CORREÇÃO: Acessa o dicionário CONF para pegar apenas a string do token
+                    token_api = config.CONF.get("nppr_api_key")
+                    
+                    # Inicia o processo de resgate passando os 6 argumentos necessários
                     sucesso, seed_resgatada = recuperar_otp_pendente(
                         page_resgate,
                         email_pendente,
                         senha_jogo,
-                        senha_email,
+                        conta_full_string, 
                         prov,
+                        token_api # Envia apenas a String do Token
                     )
 
                     if sucesso and seed_resgatada:
                         conta["seed_otp"] = seed_resgatada
                         conta["status"] = "PRONTA_PARA_FARMAR"
-                        print(
-                            f"{Cores.VERDE}"
-                            f"✅ Conta {email_pendente} 100% recuperada e salva!"
-                            f"{Cores.RESET}"
-                        )
-                    else:
-                        print(
-                            f"{Cores.VERMELHO}"
-                            f"⚠️ Falha ao resgatar {email_pendente}. "
-                            "Ela permanecerá no hospital (SEM_OTP)."
-                            f"{Cores.RESET}"
-                        )
+                        print(f"{Cores.VERDE}✅ Conta {email_pendente} recuperada!{Cores.RESET}")
 
-                # Salva contas atualizadas
+                # Salva o progresso no JSON
                 with open(arquivo_json, "w", encoding="utf-8") as f:
                     _json.dump(contas_json, f, indent=4)
-
+                
                 page_resgate.quit()
-
-                print(
-                    f"\n{Cores.CIANO}"
-                    "🧹 Resgate concluído! Retornando ao fluxo normal "
-                    f"de fabricação...\n{Cores.RESET}"
-                )
-                time.sleep(2)
+                print(f"\n{Cores.CIANO}🧹 Varredura finalizada.{Cores.RESET}")
 
         except Exception as e:
-            print(
-                f"{Cores.VERMELHO}Erro na varredura inicial: {e}"
-                f"{Cores.RESET}"
-            )
+            print(f"{Cores.VERMELHO}Erro na varredura inicial: {e}{Cores.RESET}")
 
     # ── Loop principal de criação ─────────────────────────────────────
     for i in range(qtd_alvo):
@@ -517,7 +500,7 @@ def executar():
 
                 # Cria a conta
                 resultado, motivo = criar_conta(
-                    page, blacklist_global, sessao, prov
+                    page, blacklist_global, sessao, prov, config.CONF
                 )
 
                 if resultado:
